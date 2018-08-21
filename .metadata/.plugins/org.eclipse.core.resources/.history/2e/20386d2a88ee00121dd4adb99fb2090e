@@ -1,0 +1,118 @@
+import java.awt.Component;
+import java.io.IOException;
+
+import javax.swing.Action;
+import javax.swing.JComponent;
+import javax.swing.KeyStroke;
+
+
+public class BoatSim {
+	private Boat unda;
+	private boolean exit;
+	private int increment;
+	private PIDController pid;
+	private double changeTiller;
+	private int seconds;
+	private int minutes;
+	public BoatSim(){
+		exit=false;
+		increment=0;
+		unda=new Boat();
+		pid=new PIDController();
+		changeTiller=0;
+		seconds=0;
+		this.minutes=0;
+	}
+	public void printStatus(){
+		System.out.println(" Min:"
+				+(this.minutes)
+				+" BoatAtHeading: "
+				+this.unda.getCurrentHeading()
+				+"TillerAtPosition: "
+				+this.unda.getTiller().getCurrentPosition()
+				+" Number of KiKpKd tryed: "+pid.kSetsTryed
+				+" MoveTotal: "+this.unda.getTiller().getTotalMovement()
+				+" TimeNotMoving: "+(this.unda.getTiller().getTimeNotMoving()/10/60));
+	}
+	public void run(){
+		int count=0;
+		while(!exit){
+			try {
+				if(System.in.available()>0){
+					int ch=System.in.read();
+					if(ch=='g'){
+						decrement();
+					}
+					if(ch=='h'){
+						increment();
+					}
+					if(ch=='x'){
+						exit=true;
+					}
+				}
+			    Thread.sleep(100);
+//			} catch(InterruptedException ex) {
+//			    Thread.currentThread().interrupt();
+			} catch (IOException e) {
+				// TODO Auto-generated catch block
+				e.printStackTrace();
+			}
+			double pidOut=pid.modPID_task((int)unda.getCurrentHeading(), 100);
+			if(pidOut>100){
+				increment();
+			}
+			else if(pidOut<-100){
+				decrement();
+			}
+			else{
+				this.changeTiller+=(pidOut/100);
+				if(changeTiller>1){
+					increment();
+					changeTiller=0;
+				}
+				else if(changeTiller<-1){
+					changeTiller=0;
+					decrement();
+				}
+			}
+			unda.moveTiller(increment);
+			increment=0;
+			if(count>10){
+				this.seconds++;
+				printStatus();
+				count=0;
+			}
+			if(this.seconds>59){
+				//printStatus();
+				this.minutes++;
+				this.seconds=0;
+			}
+			if(this.minutes>120){
+				exit=true;
+			}
+			count++;
+		}
+	}
+	public boolean isExit() {
+		return exit;
+	}
+	public void setExit(boolean exit) {
+		this.exit = exit;
+	}
+	
+	public void decrement() {
+		increment--;
+	}
+	public void increment() {
+		increment++;
+	}
+	/**
+	 * @param args
+	 */
+	public static void main(String[] args) {
+		// TODO Auto-generated method stub
+		BoatSim sim=new BoatSim();
+		sim.run();
+	}
+
+}

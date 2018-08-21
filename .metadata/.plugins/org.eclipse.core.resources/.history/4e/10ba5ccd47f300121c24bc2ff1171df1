@@ -1,0 +1,226 @@
+
+public class PIDController {
+	public AutoTunePid pidData;
+	public int pidPrior;
+	public int pidTaskTime;
+	public int Kp;
+	public int Kd;
+	public int Ki;
+	public int previous_error;  //PID error variable
+	public double integral;//PID intral variable
+	public double runTime;
+	public double pidOut;
+	public long ulPeriod;
+	public int allowedTolerance;
+	public int KdCount;
+	public int previos_error_Kd;
+	public double derivative;
+	public boolean startKd;
+	public int kSetsTryed;
+	private int vehicleStable;
+	private int tillerStable;
+	private boolean stabilized;
+	private double lastPIDout;
+	private boolean	previoslyChanged;
+	private int lastHeading;
+	private int changeTime;
+	public PIDController(){
+		pidData=new AutoTunePid();
+		kSetsTryed=0;
+		ulPeriod=0;
+		pidPrior=1;
+		pidTaskTime=100;
+		//init PID variables
+		previous_error=0;  //PID error variable
+		previos_error_Kd=0;
+		integral=0;//PID intral variable
+		Kp=15;
+		Ki=1;//.008;//.00001;
+		Kd=20;//600;
+		KdCount=0;
+		pidOut=0;
+		runTime=0;
+		this.allowedTolerance=0;
+		startKd=true;
+		derivative=0;
+		tillerStable=0;
+		vehicleStable=0;
+		stabilized=false;
+		this.previoslyChanged=false;
+		this.lastPIDout=0;
+		changeTime=0;
+		this.lastHeading=-1;
+	}
+	/*****************************************************************************
+	Name:         AD_sample_task 
+	Parameters:                     
+	Returns:        
+	Description:  calculates the pidOutput
+	
+	*****************************************************************************/
+	public double modPID_task(int currentHeading, int desiredHeading)
+	{
+		if(pidData.isReset()){
+			//reset integral to smooth transition to new ki,kp,kd
+			integral=0;
+			//reset derivative to smooth transition to new ki,kp,kd
+			startKd=true;
+			//get random kp,ki,kd
+			//System.out.println("Old-----------------"+this.Kp+","+this.Ki+","+this.Kd);
+			this.Kp=(int)(Math.random()*600.0);
+			this.Ki=(int)(Math.random()*600.0);
+			this.Kd=(int)(Math.random()*12000.0);
+			//keep track of the ones we have used
+//			pidData.Kd[pidData.currKSet]=this.Kd;
+//			pidData.Ki[pidData.currKSet]=this.Ki;
+//			pidData.Kp[pidData.currKSet]=this.Kp;
+			//System.out.println("New-----------------"+this.Kp+","+this.Ki+","+this.Kd);
+
+//			pidData.currKSet++;
+			kSetsTryed++;
+			//tell it we are ready to try a new set
+			pidData.setReset(false);
+		}
+		int error=0;
+//		if(useTilt){
+//			error=degreeDifferance(0,heading.desiredTilt,heading.tilt);
+//			if(++KdCount>3){
+//				dterm=(degreeDifferance(0,heading.tilt,dvar))/3.0;
+//				dvar=heading.tilt;
+//				KdCount=0;
+//			}
+//		}
+//		else{
+		error=degreeDifferance(false,desiredHeading,currentHeading);
+
+		//derivative=(error-previous_error)/.1;
+		if(++KdCount>4){
+			if(startKd){
+				this.lastHeading=currentHeading;
+				//previos_error_Kd=error;
+				startKd=false;
+			}
+			//TODO: change this to currentHeadning-previosHeading
+			//TODO: working on smoothing currentHeading input
+			derivative=(degreeDifferance(false,this.lastHeading, currentHeading))/5.0;
+			//previos_error_Kd=error;
+			this.lastHeading=currentHeading;
+			KdCount=0;
+			//System.out.println("p="+(Kp*error)+" i="+(((float)Ki/10000.0)*(integral + error))+" d="+(Kd*derivative));
+		}
+		else if(this.lastHeading==-1){
+			this.lastHeading=currentHeading;
+		}
+		if(error*integral<0){
+			integral=0;
+		}
+		else{
+			integral = (integral + error);
+		}
+		pidOut=(Kp*error) + (((float)Ki/10000.0)*integral) + (Kd*derivative);
+		previous_error = error;
+		runTime=Math.abs(pidOut/10);
+		if(runTime>100){
+			runTime=110;//11;
+		}
+
+		if(pidData.currCount<PidData.ITERATIONS){
+			pidData.u[pidData.currCount]=(int)pidOut;
+			//pidData.r[pidData.currCount]=desiredHeading;
+			pidData.y[pidData.currCount]=currentHeading;
+			//pidData.integral[pidData.currCount]=(int)integral;
+			pidData.currCount++;
+		}
+		else{
+			pidData.currCount=0;
+			pidData.resetCount++;
+		}
+		if(this.isStable(pidOut, error)){
+			//System.out.print("Stable,");
+			return 0;
+		}
+		if(takeChange(pidOut)){
+			pidData.calcTspec(this.Kp,(float)(Ki/10000.0),this.Kd);
+			return pidOut;
+		}
+		return 0;
+	}
+	/* if the absoluteValue is set to 0 then degreeDifferance will have a sign pos or  neg */
+	public static int degreeDifferance(boolean absoluteValue,int current,int desired){
+		int compDiff=0;
+		int accrossN=0;
+		compDiff=Math.abs(current-desired);
+		if(compDiff>180){
+			compDiff=Math.abs(compDiff-360);
+			accrossN=1;
+		}
+		if(absoluteValue || ((current>desired && accrossN==0) || (accrossN==1 && current<desired))){
+			return compDiff;
+		}
+		else{
+			return (-1*compDiff);
+		}
+	}
+	public boolean isStable(double pidOut,int error){
+		if(this.allowedTolerance>Math.abs(error)&&stabilized){
+			this.integral=0;
+			return true;
+		}
+		else if(stabilized){
+			stabilized=false;
+			vehicleStable=0;
+			tillerStable=0;
+		}
+		if(Math.abs(error)<1){
+			vehicleStable++;
+		}
+		else{
+			vehicleStable=0;
+		}		
+		if(pidOut<30){
+			tillerStable++;
+		}
+		else{
+			tillerStable=0;
+		}
+		if(vehicleStable>15){//(tillerStable>15&&vehicleStable>30)
+			stabilized=true;
+			return true;
+		}
+		return false;
+	}
+	public boolean takeChange(double currentPIDout){
+		if(previoslyChanged){
+			if(lastPIDout*currentPIDout<0){
+				previoslyChanged=false;
+				lastPIDout=currentPIDout;
+				changeTime=0;
+				return true;
+			}
+			else if((lastPIDout>=0&&lastPIDout<currentPIDout)||(lastPIDout<0&&lastPIDout>currentPIDout)){
+				previoslyChanged=false;
+				lastPIDout=currentPIDout;
+				changeTime=0;
+				return true;
+			}
+			//2 second delay reset
+			else if(changeTime++>20){
+				changeTime=0;
+				previoslyChanged=false;
+				lastPIDout=currentPIDout;
+				return true;
+			}
+		}
+		else if(lastPIDout*currentPIDout>=0){
+			previoslyChanged=false;
+			lastPIDout=currentPIDout;
+			changeTime=0;
+			return true;
+		}
+		else{
+			previoslyChanged=true;
+		}
+		lastPIDout=currentPIDout;
+		return false;
+	}
+}

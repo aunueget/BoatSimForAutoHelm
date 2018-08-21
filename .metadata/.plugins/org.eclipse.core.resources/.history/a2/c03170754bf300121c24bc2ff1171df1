@@ -1,0 +1,94 @@
+
+public class Boat {
+	private double currentHeading;
+	private double currentTurn;
+	private Tiller tiller;
+	private int changeDirectionCount;
+	private double previosTurn;
+	private double random;
+	private double randomCount;
+	private double randomTime;
+	public Boat(){
+		this.currentHeading=330;
+		this.currentTurn=0;
+		this.tiller=new Tiller();
+		changeDirectionCount=0;
+		this.previosTurn=this.currentTurn;
+		this.random=0;
+		this.randomCount=0;
+		this.randomTime=0;
+	}
+	public Boat(int heading){
+		this.currentHeading=heading;
+		this.currentTurn=0;
+		this.tiller=new Tiller();
+	}
+	public Boat(int heading,int tillerPosition){
+		this.currentHeading=heading;
+		this.currentTurn=0;
+		this.tiller=new Tiller(tillerPosition);
+	}
+	public double getCurrentHeading() {
+		return currentHeading;
+	}
+	public double getCurrentTurn() {
+		return currentTurn;
+	}
+	public void changeHeading(int change){
+		this.currentHeading=checkLoop(this.currentHeading+change);
+	}
+	public double checkLoop(double degrees){
+		while(degrees>=360){
+			degrees-=360;
+		}
+		while(degrees<0){
+			degrees+=360;
+		}
+		return degrees;
+	}
+	public void moveTiller(int amountMove){
+		this.tiller.changePosition(amountMove);
+		this.currentTurn=calculateTurn(this.tiller);
+		this.currentHeading=checkLoop(calculateHeading(this.currentTurn));
+	}
+	public double calculateTurn(Tiller tilly){
+		//random factor thro off boat
+		if(randomCount>this.randomTime){
+			random=((Math.random()*10)-5)/12.0;
+			this.randomTime=(Math.random()*100);
+			this.randomCount=0;
+		}
+		randomCount++;
+		double change=(tilly.getCurrentPosition()/20.0);
+		change+=((tilly.getCurrentPosition()-tilly.getLastPosition())/20.0);
+		double turn = (((this.currentTurn+change+random)*39.0)+(tilly.getCurrentPosition()))/40.0;
+		if(turn>0 && turn> tiller.MAX){
+			turn=tiller.MAX;
+		}
+		else if(turn <0 && turn < tiller.MIN){
+			turn=tiller.MIN;
+		}
+
+		return turn/2;
+	}
+	public double calculateHeading(double rateOfTurn){
+		double heading=this.currentHeading;
+		heading+=(rateOfTurn/10.0);
+		if(this.previosTurn*rateOfTurn<0){
+			//System.out.println("Direction changed count is: "+this.changeDirectionCount);
+			this.changeDirectionCount=0;
+		}
+		else{
+			this.changeDirectionCount++;
+		}
+		previosTurn=rateOfTurn;
+		return checkLoop(heading);
+	}
+	public Tiller getTiller() {
+		return tiller;
+	}
+	public void setTiller(Tiller tiller) {
+		this.tiller = tiller;
+	}
+
+}
